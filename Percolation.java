@@ -12,28 +12,116 @@
 // @Command(name = "hello", mixinStandardHelpOptions = true, version = "hello 0.1", description = "hello made with jbang")
 // class Main implements Callable<Integer> {
 
-class Percolation {
+import java.util.List;
+import java.util.ArrayList;
 
-  // @Parameters(index = "0", description = "The greeting to print", defaultValue
-  // = "World!")
-  // private String greeting;
+class Stats {
+  private final List<Double> numbers;
 
-  public static void main(String... args) {
-    GridSites grid = new GridSites(5);
-
-    grid.open(2, 3);
-
-    grid.printGrid();
-
-    // int exitCode = new CommandLine(new Main()).execute(args);
-    // System.exit(exitCode);
+  public Stats(List<Double> numbers) {
+    this.numbers = numbers;
   }
 
-  // @Override
-  // public Integer call() throws Exception { // your business logic goes here...
-  // System.out.println("Hello " + greeting);
-  // return 0;
-  // }
+  public double mean() {
+    double sum = 0;
+    for (double num : numbers) {
+      sum += num;
+    }
+    return sum / numbers.size();
+  }
+
+  public double stddev() {
+    double mean = mean();
+    double sum = 0;
+    for (double num : numbers) {
+      sum += Math.pow(num - mean, 2);
+    }
+    return Math.sqrt(sum / (numbers.size() - 1));
+  }
+
+  public double[] confidence() {
+    double mean = mean();
+    double stddev = stddev();
+    double marginOfError = 1.96 * stddev / Math.sqrt(numbers.size());
+    return new double[] { mean - marginOfError, mean + marginOfError };
+  }
+
+  public void displayStats() {
+    System.out.println("Mean: " + mean());
+    System.out.println("Standard deviation: " + stddev());
+    double[] confidence = confidence();
+    System.out.println("95% confidence interval: [" + confidence[0] + ", " + confidence[1] + "]");
+  }
+}
+
+class Percolation {
+  public static void main(String... args) {
+    int gridSize = 20;
+    int numExperiments = 1000;
+    int totalOpenSites = 0;
+    GridSites finalGrid = null; // variable to store the final state of the grid
+
+    List<Double> percolationThresholds = new ArrayList<>();
+    for (int i = 0; i < numExperiments; i++) {
+      GridSites grid = new GridSites(gridSize);
+      WeightedQuickUnion uf = new WeightedQuickUnion(gridSize * gridSize + 2);
+
+      while (!percolates(grid, uf)) {
+        int row = (int) (Math.random() * gridSize);
+        int col = (int) (Math.random() * gridSize);
+        if (!grid.isOpen(row, col)) {
+          grid.open(row, col);
+          unionWithNeighbors(row, col, grid, uf);
+        }
+        if (percolates(grid, uf)) {
+          finalGrid = grid; // save the final state of the grid
+        }
+      }
+
+      totalOpenSites += grid.getNumberOfOpenSites();
+
+      double percolationThreshold = (double) totalOpenSites / (gridSize * gridSize);
+      percolationThresholds.add(percolationThreshold);
+    }
+
+    if (finalGrid != null) {
+      finalGrid.printGrid(); // print the final state of the grid
+      System.out.println();
+    }
+
+    Stats stats = new Stats(percolationThresholds);
+    stats.displayStats();
+  }
+
+  private static boolean percolates(GridSites grid, WeightedQuickUnion uf) {
+    int top = 0;
+    int bottom = grid.getSize() * grid.getSize() + 1;
+    return uf.connected(top, bottom);
+  }
+
+  private static void unionWithNeighbors(int row, int col, GridSites grid, WeightedQuickUnion uf) {
+    int[][] directions = { { -1, 0 }, { 1, 0 }, { 0, -1 }, { 0, 1 } };
+    int n = grid.getSize();
+    int p = n * row + col + 1;
+
+    for (int[] dir : directions) {
+      int newRow = row + dir[0];
+      int newCol = col + dir[1];
+
+      if (newRow >= 0 && newRow < n && newCol >= 0 && newCol < n && grid.isOpen(newRow, newCol)) {
+        int q = n * newRow + newCol + 1;
+        uf.union(p, q);
+      }
+    }
+
+    if (row == 0) {
+      uf.union(p, 0);
+    }
+
+    if (row == n - 1) {
+      uf.union(p, n * n + 1);
+    }
+  }
 }
 
 class GridSites {
@@ -79,6 +167,18 @@ class GridSites {
         System.out.print(grid[i][j] + " ");
       }
     }
+  }
+
+  public int getNumberOfOpenSites() {
+    int count = 0;
+    for (int i = 0; i < size; i++) {
+      for (int j = 0; j < size; j++) {
+        if (grid[i][j] == 1) {
+          count++;
+        }
+      }
+    }
+    return count;
   }
 }
 
