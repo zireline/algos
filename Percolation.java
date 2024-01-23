@@ -22,7 +22,7 @@ class Percolation {
     GridSites grid = new GridSites(5);
 
     grid.open(2, 3);
-    ;
+
     grid.printGrid();
 
     // int exitCode = new CommandLine(new Main()).execute(args);
