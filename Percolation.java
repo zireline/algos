@@ -15,6 +15,12 @@
 import java.util.List;
 import java.util.ArrayList;
 
+class Data {
+  public static int gridSize = 20;
+  public static int T = 100;
+  public static int totalOpenSites = 0;
+}
+
 class Stats {
   private final List<Double> numbers;
 
@@ -27,7 +33,7 @@ class Stats {
     for (double num : numbers) {
       sum += num;
     }
-    return sum / numbers.size();
+    return sum / Data.T;
   }
 
   public double stddev() {
@@ -36,13 +42,13 @@ class Stats {
     for (double num : numbers) {
       sum += Math.pow(num - mean, 2);
     }
-    return Math.sqrt(sum / (numbers.size() - 1));
+    return Math.sqrt(sum / (Data.T - 1));
   }
 
   public double[] confidence() {
     double mean = mean();
     double stddev = stddev();
-    double marginOfError = 1.96 * stddev / Math.sqrt(numbers.size());
+    double marginOfError = 1.96 * stddev / Math.sqrt(Data.T);
     return new double[] { mean - marginOfError, mean + marginOfError };
   }
 
@@ -56,12 +62,13 @@ class Stats {
 
 class Percolation {
   public static void main(String... args) {
-    int gridSize = 20;
-    int numExperiments = 1000;
-    int totalOpenSites = 0;
+    int gridSize = Data.gridSize;
+    int numExperiments = Data.T;
+    int totalOpenSites = Data.totalOpenSites;
     GridSites finalGrid = null; // variable to store the final state of the grid
 
     List<Double> percolationThresholds = new ArrayList<>();
+
     for (int i = 0; i < numExperiments; i++) {
       GridSites grid = new GridSites(gridSize);
       WeightedQuickUnion uf = new WeightedQuickUnion(gridSize * gridSize + 2);
@@ -69,10 +76,12 @@ class Percolation {
       while (!percolates(grid, uf)) {
         int row = (int) (Math.random() * gridSize);
         int col = (int) (Math.random() * gridSize);
+        
         if (!grid.isOpen(row, col)) {
           grid.open(row, col);
           unionWithNeighbors(row, col, grid, uf);
         }
+
         if (percolates(grid, uf)) {
           finalGrid = grid; // save the final state of the grid
         }
@@ -80,7 +89,9 @@ class Percolation {
 
       totalOpenSites += grid.getNumberOfOpenSites();
 
-      double percolationThreshold = (double) totalOpenSites / (gridSize * gridSize);
+      System.out.println("TOTAL OPEN SITES: " + totalOpenSites);
+      double percolationThreshold = totalOpenSites / (gridSize * gridSize);
+      System.out.println("PERCOLATION THRESHOLD: " + percolationThreshold);
       percolationThresholds.add(percolationThreshold);
     }
 
@@ -122,6 +133,7 @@ class Percolation {
       uf.union(p, n * n + 1);
     }
   }
+
 }
 
 class GridSites {
