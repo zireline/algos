@@ -12,135 +12,148 @@
 // @Command(name = "hello", mixinStandardHelpOptions = true, version = "hello 0.1", description = "hello made with jbang")
 // class Main implements Callable<Integer> {
 
-import java.util.List;
-import java.util.ArrayList;
-
 class Data {
-  public static int gridSize = 20;
+  public static int gridSize = 200;
   public static int T = 100;
   public static int totalOpenSites = 0;
 }
 
-class Stats {
-  private final List<Double> numbers;
+// main class
+class Main {
+  public static void main(String... args) {
+    int gridSize = Data.gridSize;
+    int T = Data.T;
+    double[] thresholds = new double[T];
 
-  public Stats(List<Double> numbers) {
-    this.numbers = numbers;
+    for (int i = 0; i < T; i++) {
+      Percolation percolation = new Percolation();
+      percolation.create(gridSize);
+
+      while (!percolation.percolates()) {
+        int row = (int) (Math.random() * gridSize);
+        int col = (int) (Math.random() * gridSize);
+        if (!percolation.isOpen(row, col)) {
+          percolation.open(row, col);
+          Data.totalOpenSites++;
+        }
+      }
+
+      thresholds[i] = (double) Data.totalOpenSites / (gridSize * gridSize);
+      Data.totalOpenSites = 0; // reset for the next simulation
+    }
+
+    // Calculate the average threshold
+    Stats stats = new Stats();
+    double averageThreshold = stats.mean(thresholds);
+    double stddev = stats.stddev(thresholds);
+    double confidenceLo = stats.confidenceLo(thresholds);
+    double confidenceHi = stats.confidenceHi(thresholds);
+
+    System.out.println("Mean percolation threshold: " + averageThreshold);
+    System.out.println("Stddev: " + stddev);
+    System.out.println("95% confidence interval: [" + confidenceLo + ", " + confidenceHi + "]");
+  }
+}
+
+class Percolation implements PercolationBase {
+  private GridSitesGenerator gridGenerator;
+  private WeightedQuickUnion wqu;
+  private int gridSize;
+
+  @Override
+  public void create(int n) {
+    gridSize = n;
+    gridGenerator = new GridSitesGenerator(n);
+    wqu = new WeightedQuickUnion(n * n + 2); // includes two virtual nodes
   }
 
-  public double mean() {
+  @Override
+  public void open(int row, int col) {
+    gridGenerator.open(row, col);
+    int siteIndex = row * gridSize + col + 1; // +1 to account for the top virtual node
+
+    // Connect to open neighbors and virtual nodes
+    if (row > 0 && isOpen(row - 1, col)) {
+      wqu.union(siteIndex, (row - 1) * gridSize + col + 1);
+    }
+    if (row < gridSize - 1 && isOpen(row + 1, col)) {
+      wqu.union(siteIndex, (row + 1) * gridSize + col + 1);
+    }
+    if (col > 0 && isOpen(row, col - 1)) {
+      wqu.union(siteIndex, row * gridSize + (col - 1) + 1);
+    }
+    if (col < gridSize - 1 && isOpen(row, col + 1)) {
+      wqu.union(siteIndex, row * gridSize + (col + 1) + 1);
+    }
+    if (row == 0) {
+      wqu.union(siteIndex, 0); // connect to top virtual node
+    }
+    if (row == gridSize - 1) {
+      wqu.union(siteIndex, gridSize * gridSize + 1); // connect to bottom virtual node
+    }
+  }
+
+  @Override
+  public boolean isFull(int row, int col) {
+    int siteIndex = row * gridSize + col + 1;
+    return wqu.connected(siteIndex, 0); // check if connected to top virtual node
+  }
+
+  @Override
+  public int numberOfOpenSites() {
+    return gridGenerator.getNumberOfOpenSites();
+  }
+
+  @Override
+  public boolean percolates() {
+    return wqu.connected(0, gridSize * gridSize + 1); // check if top and bottom virtual nodes are connected
+  }
+
+  @Override
+  public boolean isOpen(int row, int col) {
+    return gridGenerator.isOpen(row, col);
+  }
+
+}
+
+// calculates mean, standard deviation, and 95% confidence interval
+class Stats {
+  public double mean(double[] numbers) {
     double sum = 0;
     for (double num : numbers) {
       sum += num;
     }
-    return sum / Data.T;
+    return sum / numbers.length;
   }
 
-  public double stddev() {
-    double mean = mean();
+  public double stddev(double[] numbers) {
+    double mean = mean(numbers);
     double sum = 0;
     for (double num : numbers) {
       sum += Math.pow(num - mean, 2);
     }
-    return Math.sqrt(sum / (Data.T - 1));
+    return Math.sqrt(sum / (numbers.length - 1));
   }
 
-  public double[] confidence() {
-    double mean = mean();
-    double stddev = stddev();
-    double marginOfError = 1.96 * stddev / Math.sqrt(Data.T);
-    return new double[] { mean - marginOfError, mean + marginOfError };
+  public double confidenceLo(double[] numbers) {
+    double mean = mean(numbers);
+    double stddev = stddev(numbers);
+    return mean - 1.96 * stddev / Math.sqrt(numbers.length);
   }
 
-  public void displayStats() {
-    System.out.println("Mean: " + mean());
-    System.out.println("Standard deviation: " + stddev());
-    double[] confidence = confidence();
-    System.out.println("95% confidence interval: [" + confidence[0] + ", " + confidence[1] + "]");
+  public double confidenceHi(double[] numbers) {
+    double mean = mean(numbers);
+    double stddev = stddev(numbers);
+    return mean + 1.96 * stddev / Math.sqrt(numbers.length);
   }
 }
 
-class Percolation {
-  public static void main(String... args) {
-    int gridSize = Data.gridSize;
-    int numExperiments = Data.T;
-    int totalOpenSites = Data.totalOpenSites;
-    GridSites finalGrid = null; // variable to store the final state of the grid
-
-    List<Double> percolationThresholds = new ArrayList<>();
-
-    for (int i = 0; i < numExperiments; i++) {
-      GridSites grid = new GridSites(gridSize);
-      WeightedQuickUnion uf = new WeightedQuickUnion(gridSize * gridSize + 2);
-
-      while (!percolates(grid, uf)) {
-        int row = (int) (Math.random() * gridSize);
-        int col = (int) (Math.random() * gridSize);
-        
-        if (!grid.isOpen(row, col)) {
-          grid.open(row, col);
-          unionWithNeighbors(row, col, grid, uf);
-        }
-
-        if (percolates(grid, uf)) {
-          finalGrid = grid; // save the final state of the grid
-        }
-      }
-
-      totalOpenSites += grid.getNumberOfOpenSites();
-
-      System.out.println("TOTAL OPEN SITES: " + totalOpenSites);
-      double percolationThreshold = totalOpenSites / (gridSize * gridSize);
-      System.out.println("PERCOLATION THRESHOLD: " + percolationThreshold);
-      percolationThresholds.add(percolationThreshold);
-    }
-
-    if (finalGrid != null) {
-      finalGrid.printGrid(); // print the final state of the grid
-      System.out.println();
-    }
-
-    Stats stats = new Stats(percolationThresholds);
-    stats.displayStats();
-  }
-
-  private static boolean percolates(GridSites grid, WeightedQuickUnion uf) {
-    int top = 0;
-    int bottom = grid.getSize() * grid.getSize() + 1;
-    return uf.connected(top, bottom);
-  }
-
-  private static void unionWithNeighbors(int row, int col, GridSites grid, WeightedQuickUnion uf) {
-    int[][] directions = { { -1, 0 }, { 1, 0 }, { 0, -1 }, { 0, 1 } };
-    int n = grid.getSize();
-    int p = n * row + col + 1;
-
-    for (int[] dir : directions) {
-      int newRow = row + dir[0];
-      int newCol = col + dir[1];
-
-      if (newRow >= 0 && newRow < n && newCol >= 0 && newCol < n && grid.isOpen(newRow, newCol)) {
-        int q = n * newRow + newCol + 1;
-        uf.union(p, q);
-      }
-    }
-
-    if (row == 0) {
-      uf.union(p, 0);
-    }
-
-    if (row == n - 1) {
-      uf.union(p, n * n + 1);
-    }
-  }
-
-}
-
-class GridSites {
+// displays grid in terminal
+class GridSitesGenerator {
   private int[][] grid;
   private int size;
 
-  public GridSites(int size) {
+  public GridSitesGenerator(int size) {
     this.size = size;
     grid = new int[size][size];
     for (int i = 0; i < size; i++) {
@@ -194,6 +207,7 @@ class GridSites {
   }
 }
 
+// the algorithm
 class WeightedQuickUnion {
   private int[] id;
   private int[] sz;
@@ -232,4 +246,25 @@ class WeightedQuickUnion {
       sz[i] += sz[j];
     }
   }
+}
+
+interface PercolationBase {
+
+  // creates n-by-n grid, with all sites initially blocked
+  void create(int n);
+
+  // opens the site (row, col) if it is not open already
+  void open(int row, int col);
+
+  // is the site (row, col) open?
+  boolean isOpen(int row, int col);
+
+  // is the site (row, col) full?
+  boolean isFull(int row, int col);
+
+  // returns the number of open sites
+  int numberOfOpenSites();
+
+  // does the system percolate?
+  boolean percolates();
 }
