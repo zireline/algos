@@ -3,30 +3,69 @@
 //DEPS info.picocli:picocli:4.7.5
 //SOURCE ./percolation/GridSites.java
 
-// import picocli.CommandLine;
-// import picocli.CommandLine.Command;
-// import picocli.CommandLine.Parameters;
+import picocli.CommandLine;
+import picocli.CommandLine.Command;
+import picocli.CommandLine.Parameters;
 
-// import java.util.concurrent.Callable;
+import java.util.concurrent.Callable;
 
-// @Command(name = "hello", mixinStandardHelpOptions = true, version = "hello 0.1", description = "hello made with jbang")
-// class Main implements Callable<Integer> {
+// Main Class
+@Command(name = "percolation", mixinStandardHelpOptions = true, version = "algo 0.1", description = "algo made with jbang")
+class Questionaire implements Callable<Integer> {
 
-class Data {
-  public static int gridSize = 200;
-  public static int T = 100;
-  public static int totalOpenSites = 0;
+  @Parameters(index = "0", defaultValue = "200")
+  static String gridSize;
+
+  @Parameters(index = "1", defaultValue = "100")
+  static String T;
+
+  @Parameters(index = "2", defaultValue = "0")
+  static String totalOpenSites;
+
+  // function to convert a string to an integer
+  public static int stringToInt(String str) {
+    try {
+      return Integer.parseInt(str);
+    } 
+    
+    catch (NumberFormatException e) {
+      System.out.println("Invalid input. Please enter a valid integer: " + e.getMessage());
+
+      return 0;
+    }
+  }
+
+  public static void main(String... args) {
+    int exitCode = new CommandLine(new Questionaire()).execute(args);
+    System.exit(exitCode);
+  }
+
+  @Override
+  public Integer call() throws Exception { 
+    PercolationTest.start(stringToInt(gridSize), stringToInt(T), stringToInt(totalOpenSites));
+
+    return 0;
+  }
 }
 
-// main class
-class Main {
-  public static void main(String... args) {
-    int gridSize = Data.gridSize;
-    int T = Data.T;
+// tests the perculation
+class PercolationTest {
+  public static void start(
+      int gridSizeParam,
+      int triesParam,
+      int totalOpenSitesParam) {
+      int gridSize = gridSizeParam;
+      int T = triesParam;
+      int totalOpenSites = totalOpenSitesParam;
+
     double[] thresholds = new double[T];
 
+    GridSitesGenerator gridGenerator = new GridSitesGenerator(gridSize);
+    Percolation percolation = new Percolation(gridGenerator);
+
     for (int i = 0; i < T; i++) {
-      Percolation percolation = new Percolation();
+      gridGenerator = new GridSitesGenerator(gridSize);
+      percolation = new Percolation(gridGenerator);
       percolation.create(gridSize);
 
       while (!percolation.percolates()) {
@@ -34,21 +73,27 @@ class Main {
         int col = (int) (Math.random() * gridSize);
         if (!percolation.isOpen(row, col)) {
           percolation.open(row, col);
-          Data.totalOpenSites++;
+          totalOpenSites++;
         }
       }
 
-      thresholds[i] = (double) Data.totalOpenSites / (gridSize * gridSize);
-      Data.totalOpenSites = 0; // reset for the next simulation
+      // simulation reset 
+      thresholds[i] = (double) totalOpenSites / (gridSize * gridSize);
+      totalOpenSites = 0;
+
     }
 
-    // Calculate the average threshold
+    // setter for the required solutions
     Stats stats = new Stats();
     double averageThreshold = stats.mean(thresholds);
     double stddev = stats.stddev(thresholds);
     double confidenceLo = stats.confidenceLo(thresholds);
     double confidenceHi = stats.confidenceHi(thresholds);
 
+    gridGenerator.printGrid();
+    System.out.println();
+
+    //result displays on the terminal
     System.out.println("Mean percolation threshold: " + averageThreshold);
     System.out.println("Stddev: " + stddev);
     System.out.println("95% confidence interval: [" + confidenceLo + ", " + confidenceHi + "]");
@@ -60,43 +105,59 @@ class Percolation implements PercolationBase {
   private WeightedQuickUnion wqu;
   private int gridSize;
 
+  public Percolation(GridSitesGenerator gridGenerator) {
+    this.gridGenerator = gridGenerator;
+  }
+
+  // includes 2 viritual nodes as openings on top and bottom
   @Override
   public void create(int n) {
     gridSize = n;
-    gridGenerator = new GridSitesGenerator(n);
-    wqu = new WeightedQuickUnion(n * n + 2); // includes two virtual nodes
+    wqu = new WeightedQuickUnion(n * n + 2); 
   }
 
   @Override
   public void open(int row, int col) {
     gridGenerator.open(row, col);
-    int siteIndex = row * gridSize + col + 1; // +1 to account for the top virtual node
+
+    // add 1 to validate the top virtual node
+    int siteIndex = row * gridSize + col + 1; 
 
     // Connect to open neighbors and virtual nodes
     if (row > 0 && isOpen(row - 1, col)) {
       wqu.union(siteIndex, (row - 1) * gridSize + col + 1);
     }
+
     if (row < gridSize - 1 && isOpen(row + 1, col)) {
       wqu.union(siteIndex, (row + 1) * gridSize + col + 1);
     }
+
     if (col > 0 && isOpen(row, col - 1)) {
       wqu.union(siteIndex, row * gridSize + (col - 1) + 1);
     }
+
     if (col < gridSize - 1 && isOpen(row, col + 1)) {
       wqu.union(siteIndex, row * gridSize + (col + 1) + 1);
     }
+
     if (row == 0) {
-      wqu.union(siteIndex, 0); // connect to top virtual node
-    }
+
+    // connects on the virtual node on top
+    wqu.union(siteIndex, 0); 
+  }
+  
+  wqu.union(siteIndex, gridSize * gridSize + 1); 
+    // connects on the virtual node on bottom
     if (row == gridSize - 1) {
-      wqu.union(siteIndex, gridSize * gridSize + 1); // connect to bottom virtual node
     }
   }
 
   @Override
   public boolean isFull(int row, int col) {
     int siteIndex = row * gridSize + col + 1;
-    return wqu.connected(siteIndex, 0); // check if connected to top virtual node
+
+    // checker if it is connected on the top virtual node
+    return wqu.connected(siteIndex, 0); 
   }
 
   @Override
@@ -106,17 +167,18 @@ class Percolation implements PercolationBase {
 
   @Override
   public boolean percolates() {
-    return wqu.connected(0, gridSize * gridSize + 1); // check if top and bottom virtual nodes are connected
+
+    // checker if both the top and bottom virtual nodes are connected
+    return wqu.connected(0, gridSize * gridSize + 1); 
   }
 
   @Override
   public boolean isOpen(int row, int col) {
     return gridGenerator.isOpen(row, col);
   }
+};
 
-}
-
-// calculates mean, standard deviation, and 95% confidence interval
+// solutions for mean, sd, confidence level
 class Stats {
   public double mean(double[] numbers) {
     double sum = 0;
@@ -148,7 +210,7 @@ class Stats {
   }
 }
 
-// displays grid in terminal
+// displays the grid on the terminal
 class GridSitesGenerator {
   private int[][] grid;
   private int size;
@@ -186,6 +248,7 @@ class GridSitesGenerator {
   }
 
   public void printGrid() {
+    System.out.println();
     for (int i = 0; i < size; i++) {
       System.out.println();
       for (int j = 0; j < size; j++) {
@@ -203,11 +266,13 @@ class GridSitesGenerator {
         }
       }
     }
+
     return count;
+
   }
 }
 
-// the algorithm
+// the algorithm Monte Carlo simulation
 class WeightedQuickUnion {
   private int[] id;
   private int[] sz;
@@ -223,9 +288,11 @@ class WeightedQuickUnion {
 
   private int root(int i) {
     while (i != id[i]) {
-      id[i] = id[id[i]]; // path compression
+    // path compression
+      id[i] = id[id[i]]; 
       i = id[i];
     }
+
     return i;
   }
 
@@ -256,15 +323,15 @@ interface PercolationBase {
   // opens the site (row, col) if it is not open already
   void open(int row, int col);
 
-  // is the site (row, col) open?
+  // checks ig the site on row and column are open
   boolean isOpen(int row, int col);
-
-  // is the site (row, col) full?
+  
+  // checks ig the site on row and column are full
   boolean isFull(int row, int col);
 
-  // returns the number of open sites
+  // returns the amount of sites that are open
   int numberOfOpenSites();
 
-  // does the system percolate?
+  // checks if the system percolates
   boolean percolates();
 }
